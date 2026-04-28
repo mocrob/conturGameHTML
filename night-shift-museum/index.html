@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Night Shift: Museum Protocol</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', monospace;
+        }
+        
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* UI Overlay System */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        .ui-panel {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #333;
+            padding: 15px;
+            color: #ccc;
+            pointer-events: auto;
+        }
+        
+        #flashlight-indicator {
+            bottom: 20px;
+            right: 20px;
+            text-align: right;
+        }
+        
+        #battery-level {
+            font-size: 24px;
+            color: #ffcc00;
+        }
+        
+        #food-count {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+        
+        #objective-display {
+            top: 20px;
+            left: 20px;
+            max-width: 300px;
+        }
+        
+        #objective-text {
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        
+        #timer-display {
+            top: 20px;
+            right: 20px;
+            text-align: right;
+        }
+        
+        #shift-time {
+            font-size: 28px;
+            color: #ff6600;
+        }
+        
+        #rules-hint {
+            bottom: 20px;
+            left: 20px;
+            max-width: 250px;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+        
+        /* Menu Screens */
+        .menu-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 200;
+        }
+        
+        .menu-screen.hidden {
+            display: none;
+        }
+        
+        h1 {
+            color: #cc0000;
+            font-size: 48px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(204, 0, 0, 0.5);
+        }
+        
+        h2 {
+            color: #888;
+            font-size: 20px;
+            margin-bottom: 40px;
+            font-weight: normal;
+        }
+        
+        .menu-btn {
+            background: transparent;
+            border: 2px solid #666;
+            color: #ccc;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-family: 'Courier New', monospace;
+            margin: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 200px;
+        }
+        
+        .menu-btn:hover {
+            border-color: #cc0000;
+            color: #fff;
+            background: rgba(204, 0, 0, 0.1);
+        }
+        
+        #pause-menu {
+            background: rgba(0, 0, 0, 0.8);
+        }
+        
+        #game-over-screen h1 {
+            font-size: 64px;
+        }
+        
+        #victory-screen h1 {
+            color: #00cc00;
+            text-shadow: 0 0 20px rgba(0, 204, 0, 0.5);
+        }
+        
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        
+        /* Vignette effect */
+        #vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.6) 100%);
+            z-index: 50;
+        }
+        
+        /* Scanlines for CRT effect */
+        #scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.1),
+                rgba(0, 0, 0, 0.1) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            z-index: 51;
+        }
+        
+        /* Horror effects */
+        .blood-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 0%, rgba(204, 0, 0, 0.3) 100%);
+            opacity: 0;
+            transition: opacity 0.5s;
+            z-index: 75;
+        }
+        
+        .distortion-active {
+            animation: distortion 0.1s infinite;
+        }
+        
+        @keyframes distortion {
+            0% { transform: translateX(-2px); }
+            50% { transform: translateX(2px); }
+            100% { transform: translateX(-2px); }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <!-- Visual Effects -->
+        <div id="vignette"></div>
+        <div id="scanlines"></div>
+        <div id="blood-overlay" class="blood-overlay"></div>
+        
+        <!-- HUD -->
+        <div id="ui-layer">
+            <div id="crosshair"></div>
+            
+            <div id="objective-display" class="ui-panel">
+                <div style="color: #666; font-size: 12px; margin-bottom: 5px;">CURRENT OBJECTIVE</div>
+                <div id="objective-text">Begin patrol of the museum</div>
+            </div>
+            
+            <div id="timer-display" class="ui-panel">
+                <div style="color: #666; font-size: 12px; margin-bottom: 5px;">SHIFT TIME</div>
+                <div id="shift-time">12:00 AM</div>
+            </div>
+            
+            <div id="flashlight-indicator" class="ui-panel">
+                <div style="color: #666; font-size: 12px; margin-bottom: 5px;">FLASHLIGHT</div>
+                <div id="battery-level">100%</div>
+                <div id="food-count">🍖 Food: 3</div>
+            </div>
+            
+            <div id="rules-hint" class="ui-panel">
+                <div style="color: #666; font-size: 10px; margin-bottom: 5px;">SURVIVAL RULES (Press R)</div>
+                <div id="rules-text">Remember the previous guard's notes...</div>
+            </div>
+        </div>
+        
+        <!-- Main Menu -->
+        <div id="main-menu" class="menu-screen">
+            <h1>NIGHT SHIFT</h1>
+            <h2>Museum Protocol</h2>
+            <button class="menu-btn" onclick="game.startGame()">START SHIFT</button>
+            <button class="menu-btn" onclick="game.showRules()">RULES</button>
+            <button class="menu-btn" onclick="game.showCredits()">CREDITS</button>
+        </div>
+        
+        <!-- Pause Menu -->
+        <div id="pause-menu" class="menu-screen hidden">
+            <h1>PAUSED</h1>
+            <button class="menu-btn" onclick="game.resumeGame()">RESUME</button>
+            <button class="menu-btn" onclick="game.restartGame()">RESTART</button>
+            <button class="menu-btn" onclick="game.quitToMenu()">MAIN MENU</button>
+        </div>
+        
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="menu-screen hidden">
+            <h1>TERMINATED</h1>
+            <h2 id="death-reason">The museum claimed another victim</h2>
+            <button class="menu-btn" onclick="game.restartGame()">TRY AGAIN</button>
+            <button class="menu-btn" onclick="game.quitToMenu()">MAIN MENU</button>
+        </div>
+        
+        <!-- Victory Screen -->
+        <div id="victory-screen" class="menu-screen hidden">
+            <h1>SURVIVED</h1>
+            <h2 id="victory-message">You made it until dawn</h2>
+            <button class="menu-btn" onclick="game.playAgain()">ANOTHER SHIFT</button>
+            <button class="menu-btn" onclick="game.quitToMenu()">MAIN MENU</button>
+        </div>
+        
+        <!-- Rules Screen -->
+        <div id="rules-screen" class="menu-screen hidden">
+            <h1 style="font-size: 36px;">SURVIVAL RULES</h1>
+            <div style="text-align: left; max-width: 600px; margin: 20px; line-height: 2; color: #ccc;">
+                <p><strong style="color: #cc0000;">RULE 1:</strong> If one of the specimen jars is found empty — immediately search for the escaped creature. You have exactly 4 minutes to return it before it begins hunting.</p>
+                <p><strong style="color: #cc0000;">RULE 2:</strong> Enter the taxidermy hall only with your flashlight ON. Keep the light aimed at the animals at all times while crossing.</p>
+                <p><strong style="color: #cc0000;">RULE 3:</strong> If in the evolution hall you see a wax figure breathing heavily — calmly leave without breaking eye contact, then continue patrol from that location after 30 minutes.</p>
+                <p><strong style="color: #cc0000;">RULE 4:</strong> Always carry food. If you hear something running directly toward you, throw food on the floor and hide behind the nearest corner. Only come out when IT leaves.</p>
+                <p><strong style="color: #cc0000;">RULE 5:</strong> Sometimes you will feel someone walking behind you. Do not turn around until you reach the fossil hall.</p>
+            </div>
+            <button class="menu-btn" onclick="game.hideRules()">BACK</button>
+        </div>
+        
+        <!-- Credits Screen -->
+        <div id="credits-screen" class="menu-screen hidden">
+            <h1 style="font-size: 36px;">CREDITS</h1>
+            <div style="text-align: center; line-height: 2; color: #888;">
+                <p>A Psychological Horror Experience</p>
+                <p>Built with Three.js</p>
+                <p>&copy; 2024 Night Shift Studios</p>
+            </div>
+            <button class="menu-btn" onclick="game.hideCredits()">BACK</button>
+        </div>
+    </div>
+
+    <!-- Import Three.js and GLTFLoader -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    
+    <script type="module" src="scripts/controllers/GameController.js"></script>
+</body>
+</html>
